@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>餐廳轉盤</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #fff; --text: #22252e; --muted: #7a8090;
+    --accent: #ff6b4a; --line: #e6e8ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 24px 16px 48px;
+  }
+  header { width: 100%; max-width: 920px; display: flex; justify-content: space-between; align-items: center; }
+  h1 { margin: 0; font-size: 1.6rem; }
+  #mute { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-size: .95rem; }
+  main { width: 100%; max-width: 920px; display: flex; flex-wrap: wrap; gap: 24px; margin-top: 20px; justify-content: center; }
+  .wheel-box { position: relative; width: min(440px, 92vw); aspect-ratio: 1; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #pointer {
+    position: absolute; top: -6px; left: 50%; width: 36px; height: 44px; margin-left: -18px;
+    transform-origin: 50% 20%; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0,0,0,.3));
+  }
+  #pointer.tick { animation: tick .12s ease-out; }
+  @keyframes tick { 0% { transform: rotate(0); } 40% { transform: rotate(-22deg); } 100% { transform: rotate(0); } }
+  #spin {
+    position: absolute; top: 50%; left: 50%; width: 88px; height: 88px; margin: -44px 0 0 -44px;
+    border-radius: 50%; border: 4px solid #fff; background: var(--accent); color: #fff;
+    font-size: 1.15rem; font-weight: 700; cursor: pointer; z-index: 3;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  #spin:hover:not(:disabled) { transform: scale(1.06); }
+  #spin:disabled { background: #b9bcc6; cursor: not-allowed; }
+  .panel { background: var(--card); border-radius: 16px; padding: 20px; width: min(360px, 92vw); box-shadow: 0 2px 10px rgba(0,0,0,.06); align-self: flex-start; }
+  .panel h2 { margin: 0 0 12px; font-size: 1.1rem; }
+  form { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 1rem; min-width: 0; }
+  form button { padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; }
+  ul { list-style: none; padding: 0; margin: 14px 0 0; max-height: 300px; overflow: auto; }
+  li { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--line); animation: fadein .25s ease-out; }
+  li.out { animation: fadeout .2s ease-in forwards; }
+  @keyframes fadein { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeout { to { opacity: 0; transform: translateX(12px); } }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  li span.name { flex: 1; word-break: break-all; }
+  li button { border: 0; background: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; }
+  li button:hover { color: #e03; }
+  .empty { color: var(--muted); font-size: .9rem; margin-top: 12px; }
+  .settings { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .settings h2 { font-size: 1rem; }
+  .settings label { display: block; margin-bottom: 12px; font-size: .95rem; }
+  .settings label b { color: var(--accent); }
+  .settings input[type=range] { width: 100%; accent-color: var(--accent); margin-top: 6px; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(20,22,30,.5); display: none; align-items: center; justify-content: center; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .overlay .card {
+    background: #fff; border-radius: 20px; padding: 28px 32px; text-align: center; max-width: 92vw; width: 400px;
+    animation: pop .45s cubic-bezier(.2,1.5,.4,1);
+  }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .overlay .label { color: var(--muted); }
+  .overlay .winner { font-size: 2.2rem; font-weight: 800; margin: 8px 0 12px; word-break: break-all; }
+  .overlay .ask { margin-bottom: 18px; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .overlay button { border: 0; border-radius: 10px; background: var(--accent); color: #fff; padding: 10px 18px; font-size: 1rem; cursor: pointer; }
+  .overlay button.ghost { background: #eef0f5; color: var(--text); }
+  .overlay button.link { background: none; color: var(--muted); text-decoration: underline; padding: 8px; width: 100%; margin-top: 4px; }
+  .sum-list { text-align: left; margin: 14px 0 6px; padding: 0 0 0 1.5em; max-height: 40vh; overflow: auto; }
+  .sum-list li { display: list-item; list-style: decimal; border: 0; padding: 5px 0; font-size: 1.15rem; font-weight: 600; animation: none; }
+  .note { color: var(--muted); font-size: .9rem; margin: 6px 0 14px; }
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍱 餐廳轉盤</h1>
+  <button id="mute" type="button">🔊 音效開</button>
+</header>
+<main>
+  <div class="wheel-box">
+    <svg id="pointer" viewBox="0 0 36 44"><path d="M18 44 L2 8 A18 18 0 0 1 34 8 Z" fill="#22252e"/><circle cx="18" cy="12" r="5" fill="#fff"/></svg>
+    <canvas id="wheel" width="880" height="880"></canvas>
+    <button id="spin" type="button">轉！</button>
+  </div>
+  <section class="panel">
+    <h2>想吃的餐廳</h2>
+    <form id="form">
+      <input id="name" type="text" placeholder="輸入餐廳名稱" maxlength="20" autocomplete="off">
+      <button type="submit">新增</button>
+    </form>
+    <ul id="list"></ul>
+    <p class="empty" id="empty">至少新增 2 家餐廳才能轉。</p>
+    <div class="settings">
+      <h2>轉盤設定</h2>
+      <label>回合數：<b id="roundsVal">1</b> 回合
+        <input id="rounds" type="range" min="1" max="10" step="1" value="1">
+      </label>
+      <label>每回合轉動時間：<b id="durVal">5</b> 秒
+        <input id="dur" type="range" min="1" max="15" step="1" value="5">
+      </label>
+    </div>
+  </section>
+</main>
+
+<div id="result" class="overlay"><div class="card">
+  <div class="label" id="roundLabel"></div>
+  <div class="winner" id="winner"></div>
+  <div class="ask" id="ask"></div>
+  <div class="btns">
+    <button id="rmBtn" type="button"></button>
+    <button id="keepBtn" type="button" class="ghost"></button>
+  </div>
+  <button id="endBtn" type="button" class="link">結束，不再繼續</button>
+</div></div>
+
+<div id="single" class="overlay"><div class="card">
+  <div class="label">今天吃</div>
+  <div class="winner" id="singleWinner"></div>
+  <button id="singleClose" type="button">好，就吃這家！</button>
+</div></div>
+
+<div id="summary" class="overlay"><div class="card">
+  <div class="label">本次結果</div>
+  <ol class="sum-list" id="sumList"></ol>
+  <div class="note" id="sumNote"></div>
+  <div class="btns">
+    <button id="restoreBtn" type="button" class="ghost">還原本次拿掉的餐廳</button>
+    <button id="sumClose" type="button">完成</button>
+  </div>
+</div></div>
+<canvas id="confetti"></canvas>
+
+<script>
+const COLORS = ['#ff6b4a','#ffb347','#ffd84a','#7bd389','#4ecdc4','#5aa9ff','#9b8cff','#ff7eb6'];
+const STORE = 'lunch-wheel-items', SETTINGS = 'lunch-wheel-settings';
+const $ = id => document.getElementById(id);
+const canvas = $('wheel'), ctx = canvas.getContext('2d');
+const SIZE = canvas.width, C = SIZE / 2;
+
+let items = [];
+try { items = JSON.parse(localStorage.getItem(STORE)) || []; } catch (e) {}
+if (!Array.isArray(items) || !items.length) items = ['拉麵', '便當', '麥當勞', '義大利麵'];
+
+let angle = 0;          // 目前轉盤旋轉角度（弧度）
+let spinning = false;   // 轉盤正在轉
+let busy = false;       // 一次完整抽選（含各回合）進行中
+let session = null;
+let muted = false;
+let highlight = -1;
+
+function save() { try { localStorage.setItem(STORE, JSON.stringify(items)); } catch (e) {} }
+const colorOf = i => COLORS[i % COLORS.length];
+
+/* ---------- 設定 ---------- */
+try {
+  const s = JSON.parse(localStorage.getItem(SETTINGS)) || {};
+  if (s.rounds) $('rounds').value = s.rounds;
+  if (s.dur) $('dur').value = s.dur;
+} catch (e) {}
+function syncSettings() {
+  $('roundsVal').textContent = $('rounds').value;
+  $('durVal').textContent = $('dur').value;
+  try { localStorage.setItem(SETTINGS, JSON.stringify({ rounds: +$('rounds').value, dur: +$('dur').value })); } catch (e) {}
+}
+$('rounds').oninput = $('dur').oninput = syncSettings;
+syncSettings();
+
+/* ---------- 繪製 ---------- */
+function draw() {
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  const n = items.length;
+  if (!n) {
+    ctx.fillStyle = '#e6e8ef'; ctx.beginPath(); ctx.arc(C, C, C - 10, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  const seg = Math.PI * 2 / n;
+  for (let i = 0; i < n; i++) {
+    const a0 = angle + i * seg - Math.PI / 2, a1 = a0 + seg;
+    ctx.beginPath(); ctx.moveTo(C, C); ctx.arc(C, C, C - 10, a0, a1); ctx.closePath();
+    ctx.fillStyle = colorOf(i); ctx.fill();
+    if (i === highlight) { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fill(); }
+    ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
+    // 文字保持水平：放在扇形中線 62% 半徑處，字級依扇形寬度自動縮小
+    const mid = a0 + seg / 2, r = (C - 10) * .62;
+    const chord = 2 * r * Math.sin(Math.min(seg / 2, Math.PI / 2));
+    let t = items[i]; if (t.length > 8) t = t.slice(0, 7) + '…';
+    const weight = i === highlight ? 'bold ' : '600 ';
+    const face = '"Microsoft JhengHei", sans-serif';
+    ctx.font = weight + '38px ' + face;
+    const w38 = ctx.measureText(t).width;
+    const fs = Math.max(16, Math.min(38, 38 * Math.min(chord * .85, 260) / w38, chord * .6));
+    ctx.font = weight + fs + 'px ' + face;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#22252e';
+    ctx.fillText(t, C + Math.cos(mid) * r, C + Math.sin(mid) * r);
+  }
+  ctx.lineWidth = 10; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(C, C, C - 8, 0, Math.PI * 2); ctx.stroke();
+}
+
+/* ---------- 清單 ---------- */
+function renderList() {
+  const ul = $('list'); ul.innerHTML = '';
+  items.forEach((name, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="dot"></span><span class="name"></span><button type="button" title="刪除">✕</button>';
+    li.querySelector('.dot').style.background = colorOf(i);
+    li.querySelector('.name').textContent = name;
+    li.querySelector('button').onclick = () => {
+      if (busy) return;
+      li.classList.add('out');
+      setTimeout(() => { items.splice(i, 1); highlight = -1; save(); update(); }, 200);
+    };
+    ul.appendChild(li);
+  });
+  $('empty').style.display = items.length < 2 ? 'block' : 'none';
+  $('spin').disabled = items.length < 2 || busy;
+  $('rounds').disabled = $('dur').disabled = busy;
+}
+function update() { renderList(); draw(); }
+
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const v = $('name').value.trim();
+  if (!v || busy) return;
+  if (items.includes(v)) { $('name').select(); return; }
+  items.push(v); highlight = -1; $('name').value = ''; save(); update();
+};
+
+/* ---------- 音效（Web Audio 合成） ---------- */
+let audio;
+function ac() {
+  if (!audio) {
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+    // 播一小段無聲音訊，讓音訊裝置先醒過來
+    const src = audio.createBufferSource();
+    src.buffer = audio.createBuffer(1, 1, 22050);
+    src.connect(audio.destination); src.start();
+  }
+  if (audio.state === 'suspended') audio.resume();
+  return audio;
+}
+// 第一次點擊頁面任何地方就先暖機，不等到按「轉！」
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, ac, { once: true }));
+function tone(freq, dur, type = 'sine', vol = .2, when = 0) {
+  if (muted) return;
+  const a = ac();
+  if (a.state !== 'running') return;   // 引擎未就緒時不排程，避免恢復後一次爆出
+  const t = a.currentTime + when + .01;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + dur);
+}
+const tickSound = () => tone(900, .05, 'square', .08);
+function winSound() { [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, 'triangle', .22, i * .12)); }
+
+$('mute').onclick = () => {
+  muted = !muted; $('mute').textContent = muted ? '🔇 音效關' : '🔊 音效開';
+};
+
+/* ---------- 回合流程 ---------- */
+async function startSession() {
+  if (busy || items.length < 2) return;
+  const a = ac(); // 使用者點擊時解鎖音效
+  busy = true;
+  session = { round: 0, total: +$('rounds').value, results: [], removed: [], cur: -1, note: '' };
+  renderList();
+  // 音訊引擎還沒就緒就先等它（最多 0.8 秒），避免開頭的滴答聲被吃掉
+  if (!muted && a.state !== 'running') {
+    await Promise.race([a.resume(), new Promise(r => setTimeout(r, 800))]).catch(() => {});
+  }
+  nextRound();
+}
+
+function nextRound() {
+  session.round++;
+  $('result').classList.remove('show');
+  spin();
+}
+
+function spin() {
+  spinning = true; highlight = -1;
+  const n = items.length, seg = Math.PI * 2 / n;
+  const winner = Math.floor(Math.random() * n);
+  // 指針在最上方；讓 winner 扇形中心（含些微隨機偏移）停在指針下
+  const offset = (Math.random() - .5) * seg * .7;
+  const targetMod = -(winner * seg + seg / 2 + offset);
+  const dur = +$('dur').value * 1000;
+  const turns = Math.max(2, Math.round(dur / 1000 * 1.2));
+  const cur = angle % (Math.PI * 2);
+  const delta = ((targetMod - cur) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+  const total = delta + turns * Math.PI * 2;
+  const start = angle, t0 = performance.now();
+  const easeOut = x => 1 - Math.pow(1 - x, 4);
+  let lastIdx = -1;
+
+  function frame(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    angle = start + total * easeOut(p);
+    const idx = Math.floor((((-angle) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / seg);
+    if (idx !== lastIdx) {
+      if (lastIdx !== -1) {
+        tickSound();
+        const pt = $('pointer'); pt.classList.remove('tick'); void pt.offsetWidth; pt.classList.add('tick');
+      }
+      lastIdx = idx;
+    }
+    draw();
+    if (p < 1) requestAnimationFrame(frame);
+    else finishRound(winner);
+  }
+  requestAnimationFrame(frame);
+}
+
+function finishRound(w) {
+  spinning = false; highlight = w; draw();
+  const name = items[w];
+  session.results.push(name); session.cur = w;
+  if (session.round >= session.total) {   // 最後一回合：直接顯示結果，不詢問是否拿掉
+    if (session.total === 1) {
+      winSound(); confetti();
+      $('singleWinner').textContent = name;
+      setTimeout(() => $('single').classList.add('show'), 350);
+    } else {
+      setTimeout(showSummary, 350);
+    }
+    return;
+  }
+  winSound();
+  $('roundLabel').textContent = '第 ' + session.round + ' / ' + session.total + ' 回合';
+  $('winner').textContent = name;
+  $('ask').textContent = '要把「' + name + '」從轉盤上拿掉嗎？';
+  $('rmBtn').textContent = '拿掉，下一回合';
+  $('keepBtn').textContent = '保留，下一回合';
+  setTimeout(() => $('result').classList.add('show'), 350);
+}
+
+function choose(remove) {
+  if (remove) {
+    session.removed.push(items[session.cur]);
+    items.splice(session.cur, 1);
+    save();
+  }
+  highlight = -1; update();
+  if (items.length < 2) { session.note = '餐廳不足，提前結束。'; return showSummary(); }
+  nextRound();
+}
+
+function showSummary() {
+  $('result').classList.remove('show');
+  const ol = $('sumList'); ol.innerHTML = '';
+  session.results.forEach(n => { const li = document.createElement('li'); li.textContent = n; ol.appendChild(li); });
+  $('sumNote').textContent = session.note;
+  $('restoreBtn').style.display = session.removed.length ? '' : 'none';
+  $('summary').classList.add('show');
+  winSound(); confetti();
+}
+
+$('spin').onclick = startSession;
+$('rmBtn').onclick = () => choose(true);
+$('keepBtn').onclick = () => choose(false);
+$('endBtn').onclick = () => { highlight = -1; draw(); session.note = '已提前結束。'; showSummary(); };
+$('restoreBtn').onclick = () => {
+  session.removed.forEach(n => { if (!items.includes(n)) items.push(n); });
+  session.removed = []; save(); update();
+  $('restoreBtn').style.display = 'none';
+  $('sumNote').textContent = (session.note + ' 已還原拿掉的餐廳。').trim();
+};
+function closeSummary() {
+  $('summary').classList.remove('show');
+  busy = false; session = null; highlight = -1; update();
+}
+function closeSingle() {
+  $('single').classList.remove('show');
+  busy = false; session = null; update();
+}
+$('singleClose').onclick = closeSingle;
+$('single').onclick = e => { if (e.target === $('single')) closeSingle(); };
+$('sumClose').onclick = closeSummary;
+$('summary').onclick = e => { if (e.target === $('summary')) closeSummary(); };
+
+/* ---------- 彩帶 ---------- */
+function confetti() {
+  const cv = $('confetti'), g = cv.getContext('2d');
+  cv.width = innerWidth; cv.height = innerHeight;
+  const ps = Array.from({ length: 140 }, () => ({
+    x: cv.width / 2, y: cv.height * .45,
+    vx: (Math.random() - .5) * 16, vy: -Math.random() * 16 - 4,
+    s: Math.random() * 8 + 5, r: Math.random() * 6, vr: (Math.random() - .5) * .4,
+    c: COLORS[Math.floor(Math.random() * COLORS.length)]
+  }));
+  let f = 0;
+  (function step() {
+    g.clearRect(0, 0, cv.width, cv.height);
+    ps.forEach(p => {
+      p.vy += .35; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c;
+      g.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6); g.restore();
+    });
+    if (++f < 160) requestAnimationFrame(step); else g.clearRect(0, 0, cv.width, cv.height);
+  })();
+}
+
+update();
+</script>
+</body>
+</html>
